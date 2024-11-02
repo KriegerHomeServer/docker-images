@@ -1,0 +1,88 @@
+name: Build Docker Images
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  discover-directories:
+    runs-on: ubuntu-latest
+    outputs:
+      discovered_directories: ${{ steps.discover.outputs.discovered_directories }}
+      discovered_directories_count: ${{ steps.discover.outputs.discovered_directories_count }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Discover directories
+        id: discover
+        run: |
+          discovered_directories=$( printf '{ "dir":['; find . -maxdepth 1 -type d ! -name '.*' -printf '"%P", ' | sed 's/, $//'; printf '] }' );
+          discovered_directories_count=$( find . -maxdepth 1 -type d ! -name '.*' | wc -l );
+          
+          echo "discovered_directories=${discovered_directories}" >> "$GITHUB_OUTPUT";
+          echo "discovered_directories_count=${discovered_directories_count}" >> "$GITHUB_OUTPUT";
+    
+  build-docker-images:
+    runs-on: ubuntu-latest
+    needs:
+      - discover-directories
+    if: ${{ needs.discover-directories.outputs.discovered_directories_count > 0 }}
+    strategy:
+      matrix: ${{ fromJson( needs.discover-directories.outputs.discovered_directories ) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set ENV values from YAML
+        uses: dcarbone/yaml-to-env-action@v1.0.0
+        with:
+          debug: false
+          yaml-file: '${{ matrix.dir }}/config.yaml'
+          yq-version: '4.27.5'
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        if: ${{ github.repository == 'KriegerHomeServer/docker-images' }}
+        with:
+          context: ${{ matrix.dir }}
+          platforms: ${{ env.BUILD_PLATFORMS }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }},${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+          push: true
+          build-args: | 
+            ${{ env.BUILD_ARGS }}
+            
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        if: ${{ github.repository == 'KriegerHomeServer/docker-images-development' }}
+        with:
+          context: ${{ matrix.dir }}
+          platforms: ${{ env.BUILD_PLATFORMS }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:dev
+          push: true
+          build-args: | 
+            ${{ env.BUILD_ARGS }}
+      
+      - name: Update DockerHub Description
+        uses: peter-evans/dockerhub-description@v4
+        if: ${{ github.repository == 'KriegerHomeServer/docker-images' }}
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
+          readme-filepath: ${{ matrix.dir }}/README.md
