@@ -6,9 +6,9 @@ This repository contains release versions of Docker images used in my home serve
 
 ### Images
 
-|  Name   |    Description     |       Repository        | Latest Tag |
-| :-----: | :----------------: | :---------------------: | :--------: |
-| Example | This is an example | `teegank/example-image` |  `1.0.0`   |
+|        Name        |                          Description                           |         Repository         | Latest Tag |
+| :----------------: | :------------------------------------------------------------: | :------------------------: | :--------: |
+| `Kubernetes Utils` | Image containing various utilities for working with Kubernetes | `teegank/kubernetes-utils` |  `1.0.0`   |
 
 ### Example Config
 
